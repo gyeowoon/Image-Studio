@@ -1,3 +1,4 @@
+
 <!DOCTYPE html>
 <html lang="ko">
   <head>
@@ -5,20 +6,22 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Gemini 이미지 생성기</title>
     <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Babel Standalone: 브라우저에서 JSX를 실시간으로 변환하기 위해 추가 -->
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
   <script type="importmap">
 {
   "imports": {
     "react-dom/": "https://aistudiocdn.com/react-dom@^19.2.0/",
     "react/": "https://aistudiocdn.com/react@^19.2.0/",
     "react": "https://aistudiocdn.com/react@^19.2.0",
-    "@google/genai": "https://aistudiocdn.com/@google/genai@^1.22.0",
-    "@vercel/node": "https://aistudiocdn.com/@vercel/node@^5.3.24"
+    "@google/genai": "https://aistudiocdn.com/@google/genai@^1.22.0"
   }
 }
 </script>
 </head>
   <body class="bg-gray-900 text-gray-100">
     <div id="root"></div>
-    <script type="module" src="/index.tsx"></script>
+    <!-- Babel이 JSX 코드를 변환할 수 있도록 script type을 'text/babel'로 변경 -->
+    <script type="text/babel" data-presets="react" data-type="module" src="/index.tsx"></script>
   </body>
 </html>
