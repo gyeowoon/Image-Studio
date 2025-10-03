@@ -1,98 +1,73 @@
-
-import { GoogleGenAI, Modality } from "@google/genai";
 import { AspectRatio, Tab } from "../types";
 
-if (!process.env.API_KEY) {
-    throw new Error("API_KEY environment variable not set");
-}
-
-const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
-
-const fileToGenerativePart = async (file: File) => {
-    const base64EncodedDataPromise = new Promise<string>((resolve) => {
+// Helper to convert a File to a base64 string
+const fileToBase64 = (file: File): Promise<{ data: string, mimeType: string }> => {
+    return new Promise((resolve, reject) => {
         const reader = new FileReader();
-        reader.onloadend = () => resolve((reader.result as string).split(',')[1]);
         reader.readAsDataURL(file);
+        reader.onload = () => {
+            const result = reader.result as string;
+            // result is "data:image/jpeg;base64,xxxxxxxx..."
+            // We need to extract the part after the comma
+            const data = result.split(',')[1];
+            resolve({ data, mimeType: file.type });
+        };
+        reader.onerror = (error) => reject(error);
     });
-    return {
-        inlineData: { data: await base64EncodedDataPromise, mimeType: file.type },
-    };
 };
+
 
 export const improvePrompt = async (prompt: string): Promise<string> => {
     try {
-        const systemInstruction = `You are an expert prompt engineer for an AI image generation model. Your task is to take a user's simple prompt and rewrite it into a highly detailed, descriptive, and creative prompt that will produce a better image. Follow the principles of describing a scene, using photographic terms, and providing rich context. Respond only with the improved prompt text. The prompt must be in Korean.`;
-        
-        const response = await ai.models.generateContent({
-            model: 'gemini-2.5-flash',
-            contents: prompt,
-            config: {
-                systemInstruction: systemInstruction,
-            },
+        const response = await fetch('/api/gemini', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                operation: 'improvePrompt',
+                payload: { prompt }
+            })
         });
-        return response.text;
+
+        if (!response.ok) {
+            const errorData = await response.json();
+            throw new Error(errorData.error || '프롬프트 개선 중 서버 오류 발생');
+        }
+
+        const data = await response.json();
+        return data.text;
     } catch (error) {
         console.error("Error improving prompt:", error);
-        throw new Error("프롬프트 개선 중 오류가 발생했습니다.");
+        throw new Error(error instanceof Error ? error.message : "프롬프트 개선 중 오류가 발생했습니다.");
     }
 };
 
 export const generateImage = async (prompt: string, images: File[], aspectRatio: AspectRatio, tab: Tab): Promise<string> => {
-    if (tab === Tab.GENERATE) {
-        if (!prompt) {
-            throw new Error("프롬프트를 제공해야 합니다.");
-        }
-        try {
-            const response = await ai.models.generateImages({
-                model: 'imagen-4.0-generate-001',
-                prompt: prompt,
-                config: {
-                  numberOfImages: 1,
-                  outputMimeType: 'image/jpeg',
-                  aspectRatio: aspectRatio,
-                },
-            });
-            
-            if (!response.generatedImages || response.generatedImages.length === 0) {
-                throw new Error("생성된 이미지 데이터를 찾을 수 없습니다.");
-            }
+    try {
+        const imagePayloads = await Promise.all(images.map(fileToBase64));
 
-            const base64ImageBytes: string = response.generatedImages[0].image.imageBytes;
-            return `data:image/jpeg;base64,${base64ImageBytes}`;
-        } catch (error) {
-            console.error("Error generating image with imagen:", error);
-            throw new Error("이미지 생성 중 오류가 발생했습니다.");
-        }
-    } else { // EDIT or COMPOSE
-        if (!prompt && images.length === 0) {
-            throw new Error("프롬프트 또는 이미지를 제공해야 합니다.");
-        }
-        
-        try {
-            const imageParts = await Promise.all(images.map(fileToGenerativePart));
-            const textPart = { text: prompt };
-            
-            const allParts = [...imageParts, textPart];
-            
-            const response = await ai.models.generateContent({
-                model: 'gemini-2.5-flash-image',
-                contents: { parts: allParts },
-                config: {
-                    responseModalities: [Modality.IMAGE, Modality.TEXT],
-                },
-            });
-
-            for (const part of response.candidates[0].content.parts) {
-                if (part.inlineData) {
-                    return `data:${part.inlineData.mimeType};base64,${part.inlineData.data}`;
+        const response = await fetch('/api/gemini', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                operation: 'generateImage',
+                payload: {
+                    prompt,
+                    images: imagePayloads,
+                    aspectRatio,
+                    tab
                 }
-            }
-            
-            throw new Error("생성된 이미지 데이터를 찾을 수 없습니다.");
+            })
+        });
 
-        } catch (error) {
-            console.error("Error generating/editing image:", error);
-            throw new Error("이미지 생성/편집 중 오류가 발생했습니다.");
+        if (!response.ok) {
+            const errorData = await response.json();
+            throw new Error(errorData.error || '이미지 생성 중 서버 오류 발생');
         }
+
+        const data = await response.json();
+        return data.imageUrl;
+    } catch (error) {
+        console.error("Error generating/editing image:", error);
+        throw new Error(error instanceof Error ? error.message : "이미지 생성/편집 중 오류가 발생했습니다.");
     }
 };
