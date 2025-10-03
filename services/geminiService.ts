@@ -1,20 +1,11 @@
-
 import { GoogleGenAI, Modality } from "@google/genai";
 import { AspectRatio, Tab } from "../types";
 
-const API_KEY = process.env.API_KEY;
-
-const ai = API_KEY ? new GoogleGenAI({ apiKey: API_KEY }) : null;
-
-export const isApiKeyConfigured = (): boolean => {
-    return !!ai;
-};
-
-const getAiClient = (): GoogleGenAI => {
-    if (!ai) {
-        throw new Error("API 키가 설정되지 않았습니다. 애플리케이션을 호스팅하는 서비스(예: Vercel)의 환경 변수 설정에서 'API_KEY'를 추가하고 다시 배포해주세요.");
+const getAiClient = (apiKey: string): GoogleGenAI => {
+    if (!apiKey) {
+        throw new Error("API 키가 제공되지 않았습니다.");
     }
-    return ai;
+    return new GoogleGenAI({ apiKey });
 };
 
 
@@ -29,9 +20,9 @@ const fileToGenerativePart = async (file: File) => {
     };
 };
 
-export const improvePrompt = async (prompt: string): Promise<string> => {
+export const improvePrompt = async (prompt: string, apiKey: string): Promise<string> => {
     try {
-        const aiClient = getAiClient();
+        const aiClient = getAiClient(apiKey);
         const systemInstruction = `You are an expert prompt engineer for an AI image generation model. Your task is to take a user's simple prompt and rewrite it into a highly detailed, descriptive, and creative prompt that will produce a better image. Follow the principles of describing a scene, using photographic terms, and providing rich context. Respond only with the improved prompt text. The prompt must be in Korean.`;
         
         const response = await aiClient.models.generateContent({
@@ -51,8 +42,8 @@ export const improvePrompt = async (prompt: string): Promise<string> => {
     }
 };
 
-export const generateImage = async (prompt: string, images: File[], aspectRatio: AspectRatio, tab: Tab): Promise<string> => {
-    const aiClient = getAiClient();
+export const generateImage = async (prompt: string, images: File[], aspectRatio: AspectRatio, tab: Tab, apiKey: string): Promise<string> => {
+    const aiClient = getAiClient(apiKey);
     if (tab === Tab.GENERATE) {
         if (!prompt) {
             throw new Error("프롬프트를 제공해야 합니다.");
