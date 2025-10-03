@@ -1,5 +1,5 @@
 // /api/gemini.js
-const { GoogleGenAI, Modality } = require('@google/genai');
+import { GoogleGenAI, Modality } from '@google/genai';
 
 const Tab = {
   GENERATE: 'GENERATE',
@@ -7,7 +7,7 @@ const Tab = {
   COMPOSE: 'COMPOSE',
 };
 
-async function handler(req, res) {
+export default async function handler(req, res) {
   if (req.method !== 'POST') {
     return res.status(405).json({ error: 'Method Not Allowed' });
   }
@@ -104,5 +104,3 @@ async function handler(req, res) {
     return res.status(500).json({ error: error.message || 'An unexpected error occurred.' });
   }
 }
-
-module.exports = handler;
