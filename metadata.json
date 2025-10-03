@@ -1,0 +1,5 @@
+{
+  "name": "Gemini 이미지 생성기 (Nano Banana)",
+  "description": "Gemini의 강력한 이미지 생성 및 편집 기능을 사용하여 텍스트 프롬프트와 이미지에서 멋진 시각 자료를 만듭니다. 텍스트로 이미지를 생성하고, 기존 이미지를 편집하고, 여러 이미지를 결합하여 독창적인 작품을 만들어보세요.",
+  "requestFramePermissions": []
+}
