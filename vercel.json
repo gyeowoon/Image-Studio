@@ -1,49 +1,14 @@
-
 {
   "version": 2,
   "builds": [
     {
-      "src": "index.html",
-      "use": "@vercel/static"
-    },
-    {
-      "src": "*.ts",
-      "use": "@vercel/static"
-    },
-    {
-      "src": "*.tsx",
-      "use": "@vercel/static"
-    },
-    {
-      "src": "components/*.tsx",
-      "use": "@vercel/static"
-    },
-    {
-      "src": "services/*.ts",
+      "src": "**/*",
       "use": "@vercel/static"
     }
   ],
   "routes": [
     {
       "handle": "filesystem"
-    },
-    {
-      "src": "/index.tsx",
-      "headers": {
-        "Content-Type": "application/javascript; charset=utf-8"
-      }
-    },
-    {
-      "src": "/(.*\\.ts)",
-      "headers": {
-        "Content-Type": "application/javascript; charset=utf-8"
-      }
-    },
-    {
-      "src": "/(.*\\.tsx)",
-      "headers": {
-        "Content-Type": "application/javascript; charset=utf-8"
-      }
     },
     {
       "src": "/(.*)",
