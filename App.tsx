@@ -1,8 +1,7 @@
-
 import React, { useState, useCallback, useEffect } from 'react';
 import { Tab, AspectRatio, ImageFile } from './types';
 import { MagicWandIcon, UploadIcon, SpinnerIcon } from './components/icons';
-import { improvePrompt, generateImage, isApiKeyConfigured } from './services/geminiService';
+import { improvePrompt, generateImage } from './services/geminiService';
 
 const PROMPT_TEMPLATES: Record<string, string> = {
     '사실적인 장면': '[장면 유형]의 사실적인 사진: [피사체], [행동 또는 표정], [배경]. [조명 설명]으로 장면을 비추어 [분위기] 분위기를 연출합니다. [카메라/렌즈 정보]로 촬영하여 [주요 질감 및 디테일]을 강조합니다. 이미지는 [이미지 비율] 형식이어야 합니다.',
@@ -20,19 +19,45 @@ const Header = () => (
     </header>
 );
 
-const ApiKeyNotice: React.FC = () => (
-    <div className="fixed inset-0 bg-black bg-opacity-80 flex items-center justify-center z-50 p-4 backdrop-blur-sm">
-        <div className="bg-gray-800 rounded-lg shadow-xl p-8 max-w-md text-center border border-yellow-500/50">
-            <h2 className="text-2xl font-bold text-yellow-400 mb-4">설정이 필요합니다</h2>
-            <p className="text-gray-300 mb-6">
-                Gemini API 키가 설정되지 않았습니다. 이 애플리케이션이 정상적으로 작동하려면 호스팅 서비스(예: Vercel)의 환경 변수에 <code className="bg-gray-900 text-yellow-300 font-mono p-1 rounded-md">API_KEY</code>를 추가해야 합니다.
-            </p>
-            <p className="text-sm text-gray-500">
-                환경 변수를 추가한 후에는 프로젝트를 다시 배포해야 변경사항이 적용됩니다.
-            </p>
+const ApiKeyModal: React.FC<{ onApiKeySubmit: (key: string) => void }> = ({ onApiKeySubmit }) => {
+    const [inputKey, setInputKey] = useState('');
+
+    const handleSubmit = (e: React.FormEvent) => {
+        e.preventDefault();
+        if (inputKey.trim()) {
+            onApiKeySubmit(inputKey.trim());
+        }
+    };
+
+    return (
+        <div className="fixed inset-0 bg-black bg-opacity-80 flex items-center justify-center z-50 p-4 backdrop-blur-sm">
+            <form onSubmit={handleSubmit} className="bg-gray-800 rounded-lg shadow-xl p-8 max-w-md w-full text-center border border-purple-500/50">
+                <h2 className="text-2xl font-bold text-purple-400 mb-4">Gemini API 키 입력</h2>
+                <p className="text-gray-300 mb-6">
+                    애플리케이션을 사용하려면 Gemini API 키를 입력해주세요. 입력된 키는 현재 브라우저 세션 동안만 저장됩니다.
+                </p>
+                <input
+                    type="password"
+                    value={inputKey}
+                    onChange={(e) => setInputKey(e.target.value)}
+                    className="w-full bg-gray-900 border border-gray-600 rounded-md p-3 text-gray-200 focus:ring-2 focus:ring-purple-500 focus:border-purple-500 transition mb-4"
+                    placeholder="API 키를 여기에 붙여넣으세요"
+                    autoComplete="off"
+                />
+                <button
+                    type="submit"
+                    className="w-full bg-purple-600 text-white font-bold py-3 px-4 rounded-lg hover:bg-purple-700 transition-all duration-300 disabled:opacity-50"
+                    disabled={!inputKey.trim()}
+                >
+                    키 저장 및 시작
+                </button>
+                 <p className="text-xs text-gray-500 mt-4">
+                    API 키는 <a href="https://aistudio.google.com/app/apikey" target="_blank" rel="noopener noreferrer" className="underline hover:text-purple-400">Google AI Studio</a>에서 얻을 수 있습니다.
+                </p>
+            </form>
         </div>
-    </div>
-);
+    );
+};
 
 
 const TabSelector: React.FC<{ activeTab: Tab; setActiveTab: (tab: Tab) => void }> = ({ activeTab, setActiveTab }) => {
@@ -97,7 +122,7 @@ const ImageUpload: React.FC<{ onImageSelect: (file: File) => void; imageFile: Im
 };
 
 const App: React.FC = () => {
-    const [apiKeyReady, setApiKeyReady] = useState(false);
+    const [apiKey, setApiKey] = useState<string | null>(null);
     const [activeTab, setActiveTab] = useState<Tab>(Tab.GENERATE);
     const [prompt, setPrompt] = useState('');
     const [aspectRatio, setAspectRatio] = useState<AspectRatio>('1:1');
@@ -108,24 +133,36 @@ const App: React.FC = () => {
     const [error, setError] = useState<string | null>(null);
 
     useEffect(() => {
-        setApiKeyReady(isApiKeyConfigured());
+        const storedKey = sessionStorage.getItem('gemini_api_key');
+        if (storedKey) {
+            setApiKey(storedKey);
+        }
     }, []);
 
+    const handleApiKeySubmit = (key: string) => {
+        setApiKey(key);
+        sessionStorage.setItem('gemini_api_key', key);
+    };
+
     const handleImprovePrompt = useCallback(async () => {
-        if (!prompt) return;
+        if (!prompt || !apiKey) return;
         setIsImproving(true);
         setError(null);
         try {
-            const improved = await improvePrompt(prompt);
+            const improved = await improvePrompt(prompt, apiKey);
             setPrompt(improved);
         } catch (err) {
             setError(err instanceof Error ? err.message : "프롬프트 개선 중 오류 발생");
         } finally {
             setIsImproving(false);
         }
-    }, [prompt]);
+    }, [prompt, apiKey]);
 
     const handleSubmit = useCallback(async () => {
+        if (!apiKey) {
+            setError("API 키가 설정되지 않았습니다. 페이지를 새로고침하고 키를 다시 입력해주세요.");
+            return;
+        }
         setIsProcessing(true);
         setError(null);
         setResultImage(null);
@@ -133,14 +170,14 @@ const App: React.FC = () => {
         const imageFiles = images.map(img => img.file);
 
         try {
-            const generatedImg = await generateImage(prompt, imageFiles, aspectRatio, activeTab);
+            const generatedImg = await generateImage(prompt, imageFiles, aspectRatio, activeTab, apiKey);
             setResultImage(generatedImg);
         } catch (err) {
             setError(err instanceof Error ? err.message : "이미지 생성 중 오류 발생");
         } finally {
             setIsProcessing(false);
         }
-    }, [prompt, aspectRatio, images, activeTab]);
+    }, [prompt, aspectRatio, images, activeTab, apiKey]);
     
     const handleImageSelect = (file: File, index: number) => {
         const newImage: ImageFile = {
@@ -199,8 +236,8 @@ const App: React.FC = () => {
 
     return (
         <div className="min-h-screen bg-gray-900 text-gray-100 font-sans">
-            {!apiKeyReady && <ApiKeyNotice />}
-            <div className={!apiKeyReady ? 'pointer-events-none' : ''}>
+            {!apiKey && <ApiKeyModal onApiKeySubmit={handleApiKeySubmit} />}
+            <div className={!apiKey ? 'pointer-events-none blur-sm' : ''}>
                 <Header />
                 <main className="container mx-auto p-4 md:p-8">
                     <TabSelector activeTab={activeTab} setActiveTab={handleTabChange} />
