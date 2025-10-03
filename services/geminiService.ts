@@ -1,8 +1,10 @@
-
 import { GoogleGenAI, Modality } from "@google/genai";
 import { AspectRatio, Tab } from "../types";
 
-const API_KEY = process.env.API_KEY;
+// Safely access the API key to prevent "process is not defined" error in browsers.
+// This allows the app to load and show instructions if the key is missing.
+const API_KEY = (typeof process !== 'undefined' && process.env) ? process.env.API_KEY : undefined;
+
 
 // We export this so the UI can check if the key is present.
 export const isApiKeySet = !!API_KEY;
