@@ -1,13 +1,14 @@
+
 import { GoogleGenAI, Modality } from "@google/genai";
 import { AspectRatio, Tab } from "../types";
 
-const getAiClient = (apiKey: string): GoogleGenAI => {
-    if (!apiKey) {
-        throw new Error("API 키가 제공되지 않았습니다.");
-    }
-    return new GoogleGenAI({ apiKey });
-};
+const API_KEY = process.env.API_KEY;
 
+// We export this so the UI can check if the key is present.
+export const isApiKeySet = !!API_KEY;
+
+// Initialize the AI client only if the API key is available.
+const ai = API_KEY ? new GoogleGenAI({ apiKey: API_KEY }) : null;
 
 const fileToGenerativePart = async (file: File) => {
     const base64EncodedDataPromise = new Promise<string>((resolve) => {
@@ -20,12 +21,14 @@ const fileToGenerativePart = async (file: File) => {
     };
 };
 
-export const improvePrompt = async (prompt: string, apiKey: string): Promise<string> => {
+export const improvePrompt = async (prompt: string): Promise<string> => {
+    if (!ai) {
+        throw new Error("API 키가 설정되지 않았습니다. Vercel 환경 변수를 확인해주세요.");
+    }
     try {
-        const aiClient = getAiClient(apiKey);
         const systemInstruction = `You are an expert prompt engineer for an AI image generation model. Your task is to take a user's simple prompt and rewrite it into a highly detailed, descriptive, and creative prompt that will produce a better image. Follow the principles of describing a scene, using photographic terms, and providing rich context. Respond only with the improved prompt text. The prompt must be in Korean.`;
         
-        const response = await aiClient.models.generateContent({
+        const response = await ai.models.generateContent({
             model: 'gemini-2.5-flash',
             contents: prompt,
             config: {
@@ -35,21 +38,21 @@ export const improvePrompt = async (prompt: string, apiKey: string): Promise<str
         return response.text;
     } catch (error) {
         console.error("Error improving prompt:", error);
-        if (error instanceof Error) {
-            throw error;
-        }
         throw new Error("프롬프트 개선 중 오류가 발생했습니다.");
     }
 };
 
-export const generateImage = async (prompt: string, images: File[], aspectRatio: AspectRatio, tab: Tab, apiKey: string): Promise<string> => {
-    const aiClient = getAiClient(apiKey);
+export const generateImage = async (prompt: string, images: File[], aspectRatio: AspectRatio, tab: Tab): Promise<string> => {
+    if (!ai) {
+        throw new Error("API 키가 설정되지 않았습니다. Vercel 환경 변수를 확인해주세요.");
+    }
+
     if (tab === Tab.GENERATE) {
         if (!prompt) {
             throw new Error("프롬프트를 제공해야 합니다.");
         }
         try {
-            const response = await aiClient.models.generateImages({
+            const response = await ai.models.generateImages({
                 model: 'imagen-4.0-generate-001',
                 prompt: prompt,
                 config: {
@@ -67,9 +70,6 @@ export const generateImage = async (prompt: string, images: File[], aspectRatio:
             return `data:image/jpeg;base64,${base64ImageBytes}`;
         } catch (error) {
             console.error("Error generating image with imagen:", error);
-            if (error instanceof Error) {
-                throw error;
-            }
             throw new Error("이미지 생성 중 오류가 발생했습니다.");
         }
     } else { // EDIT or COMPOSE
@@ -83,7 +83,7 @@ export const generateImage = async (prompt: string, images: File[], aspectRatio:
             
             const allParts = [...imageParts, textPart];
             
-            const response = await aiClient.models.generateContent({
+            const response = await ai.models.generateContent({
                 model: 'gemini-2.5-flash-image',
                 contents: { parts: allParts },
                 config: {
@@ -101,9 +101,6 @@ export const generateImage = async (prompt: string, images: File[], aspectRatio:
 
         } catch (error) {
             console.error("Error generating/editing image:", error);
-            if (error instanceof Error) {
-                throw error;
-            }
             throw new Error("이미지 생성/편집 중 오류가 발생했습니다.");
         }
     }
