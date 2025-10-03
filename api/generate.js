@@ -9,10 +9,8 @@ export default async function handler(req, res) {
   }
 
   try {
-    const { prompt, size = "1024x1024" } = req.body || {};
-    if (!prompt) {
-      return res.status(400).json({ error: "prompt required" });
-    }
+    const { prompt } = req.body;
+    if (!prompt) return res.status(400).json({ error: "prompt required" });
 
     const url =
       "https://generativelanguage.googleapis.com/v1beta/models/imagegeneration:generate?key=" +
@@ -21,22 +19,11 @@ export default async function handler(req, res) {
     const r = await fetch(url, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ prompt, size }),
+      body: JSON.stringify({ prompt, size: "1024x1024" }),
     });
 
-    const text = await r.text();
-    let data;
-    try {
-      data = JSON.parse(text);
-    } catch {
-      data = null;
-    }
+    const data = await r.json();
 
-    if (!r.ok) {
-      return res.status(r.status).send(text || JSON.stringify(data));
-    }
-
-    // Gemini 응답에서 base64 이미지 찾기
     const b64 =
       data?.images?.[0]?.base64 ||
       data?.generatedImages?.[0]?.base64 ||
