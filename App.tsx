@@ -1,7 +1,8 @@
-import React, { useState, useCallback, useEffect } from 'react';
+
+import React, { useState, useCallback } from 'react';
 import { Tab, AspectRatio, ImageFile } from './types';
 import { MagicWandIcon, UploadIcon, SpinnerIcon } from './components/icons';
-import { improvePrompt, generateImage } from './services/geminiService';
+import { improvePrompt, generateImage, isApiKeySet } from './services/geminiService';
 
 const PROMPT_TEMPLATES: Record<string, string> = {
     '사실적인 장면': '[장면 유형]의 사실적인 사진: [피사체], [행동 또는 표정], [배경]. [조명 설명]으로 장면을 비추어 [분위기] 분위기를 연출합니다. [카메라/렌즈 정보]로 촬영하여 [주요 질감 및 디테일]을 강조합니다. 이미지는 [이미지 비율] 형식이어야 합니다.',
@@ -18,47 +19,6 @@ const Header = () => (
         <p className="text-gray-400 mt-2">일명 Nano Banana 🍌</p>
     </header>
 );
-
-const ApiKeyModal: React.FC<{ onApiKeySubmit: (key: string) => void }> = ({ onApiKeySubmit }) => {
-    const [inputKey, setInputKey] = useState('');
-
-    const handleSubmit = (e: React.FormEvent) => {
-        e.preventDefault();
-        if (inputKey.trim()) {
-            onApiKeySubmit(inputKey.trim());
-        }
-    };
-
-    return (
-        <div className="fixed inset-0 bg-black bg-opacity-80 flex items-center justify-center z-50 p-4 backdrop-blur-sm">
-            <form onSubmit={handleSubmit} className="bg-gray-800 rounded-lg shadow-xl p-8 max-w-md w-full text-center border border-purple-500/50">
-                <h2 className="text-2xl font-bold text-purple-400 mb-4">Gemini API 키 입력</h2>
-                <p className="text-gray-300 mb-6">
-                    애플리케이션을 사용하려면 Gemini API 키를 입력해주세요. 입력된 키는 현재 브라우저 세션 동안만 저장됩니다.
-                </p>
-                <input
-                    type="password"
-                    value={inputKey}
-                    onChange={(e) => setInputKey(e.target.value)}
-                    className="w-full bg-gray-900 border border-gray-600 rounded-md p-3 text-gray-200 focus:ring-2 focus:ring-purple-500 focus:border-purple-500 transition mb-4"
-                    placeholder="API 키를 여기에 붙여넣으세요"
-                    autoComplete="off"
-                />
-                <button
-                    type="submit"
-                    className="w-full bg-purple-600 text-white font-bold py-3 px-4 rounded-lg hover:bg-purple-700 transition-all duration-300 disabled:opacity-50"
-                    disabled={!inputKey.trim()}
-                >
-                    키 저장 및 시작
-                </button>
-                 <p className="text-xs text-gray-500 mt-4">
-                    API 키는 <a href="https://aistudio.google.com/app/apikey" target="_blank" rel="noopener noreferrer" className="underline hover:text-purple-400">Google AI Studio</a>에서 얻을 수 있습니다.
-                </p>
-            </form>
-        </div>
-    );
-};
-
 
 const TabSelector: React.FC<{ activeTab: Tab; setActiveTab: (tab: Tab) => void }> = ({ activeTab, setActiveTab }) => {
     const tabs: { key: Tab; label: string }[] = [
@@ -121,8 +81,83 @@ const ImageUpload: React.FC<{ onImageSelect: (file: File) => void; imageFile: Im
     );
 };
 
+
+const ControlPanel: React.FC<{ 
+    activeTab: Tab;
+    onSubmit: () => void;
+    isProcessing: boolean;
+}> = ({ activeTab, onSubmit, isProcessing }) => {
+
+    const [prompt, setPrompt] = useState('');
+    const [aspectRatio, setAspectRatio] = useState<AspectRatio>('1:1');
+    const [images, setImages] = useState<ImageFile[]>([]);
+    const [isImproving, setIsImproving] = useState(false);
+
+    const handleImprovePrompt = async () => {
+        if (!prompt) return;
+        setIsImproving(true);
+        try {
+            const improved = await improvePrompt(prompt);
+            setPrompt(improved);
+        } catch (error) {
+            alert(error instanceof Error ? error.message : "알 수 없는 오류");
+        } finally {
+            setIsImproving(false);
+        }
+    };
+    
+    const handleImageSelect = (file: File, index: number) => {
+        const newImage: ImageFile = {
+            id: Date.now(),
+            file,
+            preview: URL.createObjectURL(file)
+        };
+        const newImages = [...images];
+        newImages[index] = newImage;
+        setImages(newImages);
+    };
+
+    const handleImageRemove = (index: number) => {
+        const newImages = [...images];
+        URL.revokeObjectURL(newImages[index].preview);
+        newImages.splice(index, 1);
+        setImages(newImages);
+    };
+
+    const handleSubmit = () => {
+        const fullPrompt = `${prompt} (${aspectRatio} 비율)`;
+        const imageFiles = images.map(img => img.file);
+        // The App component will handle the actual submission via a prop function
+        // For now, let's just imagine it's here
+        // This component structure seems a bit tricky. Refactoring...
+    };
+
+    // Refactoring this component to be part of App.tsx directly
+    // This is getting complex, will simplify in the App component
+    return null;
+};
+
+const ApiKeyInstructions = () => (
+    <div className="min-h-screen bg-gray-900 text-gray-100 flex items-center justify-center p-4 font-sans">
+        <div className="bg-gray-800 p-8 rounded-lg shadow-2xl text-center max-w-lg border border-gray-700">
+            <h1 className="text-2xl font-bold text-red-400 mb-4">API 키가 설정되지 않았습니다</h1>
+            <p className="text-gray-300 mb-6">
+                애플리케이션을 사용하려면 Gemini API 키가 필요합니다.
+            </p>
+            <div className="text-left bg-gray-900 p-4 rounded-md">
+                <p className="text-gray-400">
+                    Vercel 프로젝트 설정의 <strong className="text-purple-400">'Settings' &rarr; 'Environment Variables'</strong> 탭으로 이동하여, 아래와 같이 키를 추가한 후 다시 배포해주세요.
+                </p>
+                <div className="mt-4 p-3 bg-black/50 rounded-md text-sm">
+                    <p><span className="text-gray-500">Key:</span> <code className="text-pink-400">API_KEY</code></p>
+                    <p><span className="text-gray-500">Value:</span> <code className="text-pink-400">[여기에 실제 API 키를 붙여넣으세요]</code></p>
+                </div>
+            </div>
+        </div>
+    </div>
+);
+
 const App: React.FC = () => {
-    const [apiKey, setApiKey] = useState<string | null>(null);
     const [activeTab, setActiveTab] = useState<Tab>(Tab.GENERATE);
     const [prompt, setPrompt] = useState('');
     const [aspectRatio, setAspectRatio] = useState<AspectRatio>('1:1');
@@ -132,37 +167,25 @@ const App: React.FC = () => {
     const [resultImage, setResultImage] = useState<string | null>(null);
     const [error, setError] = useState<string | null>(null);
 
-    useEffect(() => {
-        const storedKey = sessionStorage.getItem('gemini_api_key');
-        if (storedKey) {
-            setApiKey(storedKey);
-        }
-    }, []);
-
-    const handleApiKeySubmit = (key: string) => {
-        setApiKey(key);
-        sessionStorage.setItem('gemini_api_key', key);
-    };
+    if (!isApiKeySet) {
+        return <ApiKeyInstructions />;
+    }
 
     const handleImprovePrompt = useCallback(async () => {
-        if (!prompt || !apiKey) return;
+        if (!prompt) return;
         setIsImproving(true);
         setError(null);
         try {
-            const improved = await improvePrompt(prompt, apiKey);
+            const improved = await improvePrompt(prompt);
             setPrompt(improved);
         } catch (err) {
             setError(err instanceof Error ? err.message : "프롬프트 개선 중 오류 발생");
         } finally {
             setIsImproving(false);
         }
-    }, [prompt, apiKey]);
+    }, [prompt]);
 
     const handleSubmit = useCallback(async () => {
-        if (!apiKey) {
-            setError("API 키가 설정되지 않았습니다. 페이지를 새로고침하고 키를 다시 입력해주세요.");
-            return;
-        }
         setIsProcessing(true);
         setError(null);
         setResultImage(null);
@@ -170,14 +193,14 @@ const App: React.FC = () => {
         const imageFiles = images.map(img => img.file);
 
         try {
-            const generatedImg = await generateImage(prompt, imageFiles, aspectRatio, activeTab, apiKey);
+            const generatedImg = await generateImage(prompt, imageFiles, aspectRatio, activeTab);
             setResultImage(generatedImg);
         } catch (err) {
             setError(err instanceof Error ? err.message : "이미지 생성 중 오류 발생");
         } finally {
             setIsProcessing(false);
         }
-    }, [prompt, aspectRatio, images, activeTab, apiKey]);
+    }, [prompt, aspectRatio, images, activeTab]);
     
     const handleImageSelect = (file: File, index: number) => {
         const newImage: ImageFile = {
@@ -236,146 +259,143 @@ const App: React.FC = () => {
 
     return (
         <div className="min-h-screen bg-gray-900 text-gray-100 font-sans">
-            {!apiKey && <ApiKeyModal onApiKeySubmit={handleApiKeySubmit} />}
-            <div className={!apiKey ? 'pointer-events-none blur-sm' : ''}>
-                <Header />
-                <main className="container mx-auto p-4 md:p-8">
-                    <TabSelector activeTab={activeTab} setActiveTab={handleTabChange} />
+            <Header />
+            <main className="container mx-auto p-4 md:p-8">
+                <TabSelector activeTab={activeTab} setActiveTab={handleTabChange} />
 
-                    <div className="grid grid-cols-1 lg:grid-cols-5 gap-8 mt-8">
-                        {/* Control Panel */}
-                        <div className="bg-gray-800/50 p-6 rounded-xl space-y-6 lg:col-span-2">
-                            <h2 className="text-xl font-semibold text-gray-200">1. 옵션 설정</h2>
+                <div className="grid grid-cols-1 lg:grid-cols-5 gap-8 mt-8">
+                    {/* Control Panel */}
+                    <div className="bg-gray-800/50 p-6 rounded-xl space-y-6 lg:col-span-2">
+                        <h2 className="text-xl font-semibold text-gray-200">1. 옵션 설정</h2>
 
-                            {activeTab === Tab.EDIT && (
-                                <div className="grid grid-cols-1 gap-4">
-                                    {imageUploadSlots.map((_, index) => (
+                        {activeTab === Tab.EDIT && (
+                            <div className="grid grid-cols-1 gap-4">
+                                {imageUploadSlots.map((_, index) => (
+                                    <ImageUpload
+                                        key={index}
+                                        onImageSelect={(file) => handleImageSelect(file, index)}
+                                        imageFile={images[index] || null}
+                                        onImageRemove={() => handleImageRemove(index)}
+                                        text="편집할 이미지 업로드"
+                                    />
+                                ))}
+                            </div>
+                        )}
+
+                        {activeTab === Tab.COMPOSE && (
+                            <div className="space-y-4">
+                                {/* First row: 2 images */}
+                                <div className="grid grid-cols-2 gap-4">
+                                    {Array.from({ length: 2 }).map((_, index) => (
                                         <ImageUpload
                                             key={index}
                                             onImageSelect={(file) => handleImageSelect(file, index)}
                                             imageFile={images[index] || null}
                                             onImageRemove={() => handleImageRemove(index)}
-                                            text="편집할 이미지 업로드"
+                                            text={`이미지 ${index + 1} 업로드`}
                                         />
                                     ))}
                                 </div>
-                            )}
-
-                            {activeTab === Tab.COMPOSE && (
-                                <div className="space-y-4">
-                                    {/* First row: 2 images */}
-                                    <div className="grid grid-cols-2 gap-4">
-                                        {Array.from({ length: 2 }).map((_, index) => (
+                                {/* Second row: 3 images */}
+                                <div className="grid grid-cols-3 gap-4">
+                                    {Array.from({ length: 3 }).map((_, index) => {
+                                        const actualIndex = index + 2;
+                                        return (
                                             <ImageUpload
-                                                key={index}
-                                                onImageSelect={(file) => handleImageSelect(file, index)}
-                                                imageFile={images[index] || null}
-                                                onImageRemove={() => handleImageRemove(index)}
-                                                text={`이미지 ${index + 1} 업로드`}
+                                                key={actualIndex}
+                                                onImageSelect={(file) => handleImageSelect(file, actualIndex)}
+                                                imageFile={images[actualIndex] || null}
+                                                onImageRemove={() => handleImageRemove(actualIndex)}
+                                                text={`이미지 ${actualIndex + 1} 업로드`}
                                             />
-                                        ))}
-                                    </div>
-                                    {/* Second row: 3 images */}
-                                    <div className="grid grid-cols-3 gap-4">
-                                        {Array.from({ length: 3 }).map((_, index) => {
-                                            const actualIndex = index + 2;
-                                            return (
-                                                <ImageUpload
-                                                    key={actualIndex}
-                                                    onImageSelect={(file) => handleImageSelect(file, actualIndex)}
-                                                    imageFile={images[actualIndex] || null}
-                                                    onImageRemove={() => handleImageRemove(actualIndex)}
-                                                    text={`이미지 ${actualIndex + 1} 업로드`}
-                                                />
-                                            );
-                                        })}
-                                    </div>
-                                </div>
-                            )}
-                            
-                            <div>
-                                <label htmlFor="prompt" className="block text-sm font-medium text-gray-300 mb-2">프롬프트</label>
-                                <div className="relative">
-                                    <textarea
-                                        id="prompt"
-                                        rows={6}
-                                        value={prompt}
-                                        onChange={(e) => setPrompt(e.target.value)}
-                                        className="w-full bg-gray-900 border border-gray-600 rounded-md p-3 text-gray-200 focus:ring-2 focus:ring-purple-500 focus:border-purple-500 transition"
-                                        placeholder="생성하고 싶은 이미지에 대해 자세히 설명해주세요..."
-                                    />
-                                    <button
-                                        onClick={handleImprovePrompt}
-                                        disabled={isImproving || !prompt}
-                                        className="absolute bottom-2 right-2 p-2 rounded-md bg-gray-700 hover:bg-gray-600 text-purple-300 disabled:opacity-50 disabled:cursor-not-allowed transition"
-                                        title="프롬프트 개선"
-                                    >
-                                        {isImproving ? <SpinnerIcon /> : <MagicWandIcon className="w-5 h-5"/>}
-                                    </button>
+                                        );
+                                    })}
                                 </div>
                             </div>
-
-                            <div>
-                                <label htmlFor="template" className="block text-sm font-medium text-gray-300 mb-2">프롬프트 템플릿</label>
-                                <select
-                                    id="template"
-                                    onChange={(e) => e.target.value && setPrompt(PROMPT_TEMPLATES[e.target.value])}
-                                    className="w-full bg-gray-900 border border-gray-600 rounded-md p-3 text-gray-200 focus:ring-2 focus:ring-purple-500 focus:border-purple-500"
-                                >
-                                    <option value="">템플릿 선택...</option>
-                                    {Object.keys(PROMPT_TEMPLATES).map(key => (
-                                        <option key={key} value={key}>{key}</option>
-                                    ))}
-                                </select>
-                            </div>
-                            
-                            {activeTab === Tab.GENERATE && (
-                                <div>
-                                    <label className="block text-sm font-medium text-gray-300 mb-2">이미지 비율</label>
-                                    <div className="flex space-x-2">
-                                        {(['1:1', '16:9', '9:16', '4:3', '3:4'] as AspectRatio[]).map(ratio => (
-                                            <button
-                                                key={ratio}
-                                                onClick={() => setAspectRatio(ratio)}
-                                                className={`px-4 py-2 text-sm font-medium rounded-md transition-colors ${
-                                                    aspectRatio === ratio
-                                                        ? 'bg-purple-600 text-white'
-                                                        : 'bg-gray-700 hover:bg-gray-600 text-gray-300'
-                                                }`}
-                                            >
-                                                {ratio}
-                                            </button>
-                                        ))}
-                                    </div>
-                                </div>
-                            )}
+                        )}
                         
-                            <button
-                                onClick={handleSubmit}
-                                disabled={isSubmitDisabled()}
-                                className="w-full bg-gradient-to-r from-purple-600 to-pink-600 text-white font-bold py-3 px-4 rounded-lg hover:from-purple-700 hover:to-pink-700 transition-all duration-300 disabled:opacity-50 disabled:cursor-not-allowed transform hover:scale-105"
-                            >
-                                {isProcessing ? '처리 중...' : getSubmitButtonText()}
-                            </button>
+                        <div>
+                            <label htmlFor="prompt" className="block text-sm font-medium text-gray-300 mb-2">프롬프트</label>
+                            <div className="relative">
+                                <textarea
+                                    id="prompt"
+                                    rows={6}
+                                    value={prompt}
+                                    onChange={(e) => setPrompt(e.target.value)}
+                                    className="w-full bg-gray-900 border border-gray-600 rounded-md p-3 text-gray-200 focus:ring-2 focus:ring-purple-500 focus:border-purple-500 transition"
+                                    placeholder="생성하고 싶은 이미지에 대해 자세히 설명해주세요..."
+                                />
+                                <button
+                                    onClick={handleImprovePrompt}
+                                    disabled={isImproving || !prompt}
+                                    className="absolute bottom-2 right-2 p-2 rounded-md bg-gray-700 hover:bg-gray-600 text-purple-300 disabled:opacity-50 disabled:cursor-not-allowed transition"
+                                    title="프롬프트 개선"
+                                >
+                                    {isImproving ? <SpinnerIcon /> : <MagicWandIcon className="w-5 h-5"/>}
+                                </button>
+                            </div>
                         </div>
 
-                        {/* Result Display */}
-                        <div className="bg-gray-800/50 p-6 rounded-xl flex flex-col items-center justify-center lg:col-span-3">
-                            <h2 className="text-xl font-semibold text-gray-200 w-full text-left mb-4">2. 결과</h2>
-                            <div className="w-full max-w-[740px] aspect-[74/80] bg-gray-900 rounded-lg flex items-center justify-center border border-gray-700">
-                            {isProcessing && <div className="flex flex-col items-center gap-4"><SpinnerIcon /><p className="text-gray-400">이미지를 생성하고 있습니다...</p></div>}
-                            {error && <p className="text-red-400 p-4 text-center">{error}</p>}
-                            {!isProcessing && !error && resultImage && (
-                                <img src={resultImage} alt="생성된 이미지" className="max-w-full max-h-full object-contain rounded-md" />
-                            )}
-                            {!isProcessing && !error && !resultImage && (
-                                <p className="text-gray-500">결과가 여기에 표시됩니다.</p>
-                            )}
+                        <div>
+                            <label htmlFor="template" className="block text-sm font-medium text-gray-300 mb-2">프롬프트 템플릿</label>
+                            <select
+                                id="template"
+                                onChange={(e) => e.target.value && setPrompt(PROMPT_TEMPLATES[e.target.value])}
+                                className="w-full bg-gray-900 border border-gray-600 rounded-md p-3 text-gray-200 focus:ring-2 focus:ring-purple-500 focus:border-purple-500"
+                            >
+                                <option value="">템플릿 선택...</option>
+                                {Object.keys(PROMPT_TEMPLATES).map(key => (
+                                    <option key={key} value={key}>{key}</option>
+                                ))}
+                            </select>
+                        </div>
+                        
+                        {activeTab === Tab.GENERATE && (
+                             <div>
+                                <label className="block text-sm font-medium text-gray-300 mb-2">이미지 비율</label>
+                                <div className="flex space-x-2">
+                                    {(['1:1', '16:9', '9:16', '4:3', '3:4'] as AspectRatio[]).map(ratio => (
+                                        <button
+                                            key={ratio}
+                                            onClick={() => setAspectRatio(ratio)}
+                                            className={`px-4 py-2 text-sm font-medium rounded-md transition-colors ${
+                                                aspectRatio === ratio
+                                                    ? 'bg-purple-600 text-white'
+                                                    : 'bg-gray-700 hover:bg-gray-600 text-gray-300'
+                                            }`}
+                                        >
+                                            {ratio}
+                                        </button>
+                                    ))}
+                                </div>
                             </div>
+                        )}
+                       
+                        <button
+                            onClick={handleSubmit}
+                            disabled={isSubmitDisabled()}
+                            className="w-full bg-gradient-to-r from-purple-600 to-pink-600 text-white font-bold py-3 px-4 rounded-lg hover:from-purple-700 hover:to-pink-700 transition-all duration-300 disabled:opacity-50 disabled:cursor-not-allowed transform hover:scale-105"
+                        >
+                            {isProcessing ? '처리 중...' : getSubmitButtonText()}
+                        </button>
+                    </div>
+
+                    {/* Result Display */}
+                    <div className="bg-gray-800/50 p-6 rounded-xl flex flex-col items-center justify-center lg:col-span-3">
+                        <h2 className="text-xl font-semibold text-gray-200 w-full text-left mb-4">2. 결과</h2>
+                        <div className="w-full max-w-[740px] aspect-[74/80] bg-gray-900 rounded-lg flex items-center justify-center border border-gray-700">
+                           {isProcessing && <div className="flex flex-col items-center gap-4"><SpinnerIcon /><p className="text-gray-400">이미지를 생성하고 있습니다...</p></div>}
+                           {error && <p className="text-red-400 p-4 text-center">{error}</p>}
+                           {!isProcessing && !error && resultImage && (
+                               <img src={resultImage} alt="생성된 이미지" className="max-w-full max-h-full object-contain rounded-md" />
+                           )}
+                           {!isProcessing && !error && !resultImage && (
+                               <p className="text-gray-500">결과가 여기에 표시됩니다.</p>
+                           )}
                         </div>
                     </div>
-                </main>
-            </div>
+                </div>
+            </main>
         </div>
     );
 };
