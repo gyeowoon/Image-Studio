@@ -1,73 +1,101 @@
+import { GoogleGenAI, Modality } from "@google/genai";
 import { AspectRatio, Tab } from "../types";
 
-// Helper to convert a File to a base64 string
-const fileToBase64 = (file: File): Promise<{ data: string, mimeType: string }> => {
-    return new Promise((resolve, reject) => {
-        const reader = new FileReader();
-        reader.readAsDataURL(file);
-        reader.onload = () => {
-            const result = reader.result as string;
-            // result is "data:image/jpeg;base64,xxxxxxxx..."
-            // We need to extract the part after the comma
-            const data = result.split(',')[1];
-            resolve({ data, mimeType: file.type });
-        };
-        reader.onerror = (error) => reject(error);
-    });
-};
+// Fix: Per coding guidelines, the API key must be retrieved from process.env.API_KEY.
+// This also resolves the TypeScript error for `import.meta.env`.
+const apiKey = process.env.API_KEY;
 
+if (!apiKey) {
+    throw new Error("API_KEY environment variable not set. Please set it in your Vercel project settings.");
+}
+
+const ai = new GoogleGenAI({ apiKey: apiKey });
+
+const fileToGenerativePart = async (file: File) => {
+    const base64EncodedDataPromise = new Promise<string>((resolve) => {
+        const reader = new FileReader();
+        reader.onloadend = () => resolve((reader.result as string).split(',')[1]);
+        reader.readAsDataURL(file);
+    });
+    return {
+        inlineData: { data: await base64EncodedDataPromise, mimeType: file.type },
+    };
+};
 
 export const improvePrompt = async (prompt: string): Promise<string> => {
     try {
-        const response = await fetch('/api/gemini', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                operation: 'improvePrompt',
-                payload: { prompt }
-            })
+        const systemInstruction = `You are an expert prompt engineer for an AI image generation model. Your task is to take a user's simple prompt and rewrite it into a highly detailed, descriptive, and creative prompt that will produce a better image. Follow the principles of describing a scene, using photographic terms, and providing rich context. Respond only with the improved prompt text. The prompt must be in Korean.`;
+        
+        const response = await ai.models.generateContent({
+            model: 'gemini-2.5-flash',
+            contents: prompt,
+            config: {
+                systemInstruction: systemInstruction,
+            },
         });
-
-        if (!response.ok) {
-            const errorData = await response.json();
-            throw new Error(errorData.error || '프롬프트 개선 중 서버 오류 발생');
-        }
-
-        const data = await response.json();
-        return data.text;
+        return response.text;
     } catch (error) {
         console.error("Error improving prompt:", error);
-        throw new Error(error instanceof Error ? error.message : "프롬프트 개선 중 오류가 발생했습니다.");
+        throw new Error("프롬프트 개선 중 오류가 발생했습니다.");
     }
 };
 
 export const generateImage = async (prompt: string, images: File[], aspectRatio: AspectRatio, tab: Tab): Promise<string> => {
-    try {
-        const imagePayloads = await Promise.all(images.map(fileToBase64));
-
-        const response = await fetch('/api/gemini', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                operation: 'generateImage',
-                payload: {
-                    prompt,
-                    images: imagePayloads,
-                    aspectRatio,
-                    tab
-                }
-            })
-        });
-
-        if (!response.ok) {
-            const errorData = await response.json();
-            throw new Error(errorData.error || '이미지 생성 중 서버 오류 발생');
+    if (tab === Tab.GENERATE) {
+        if (!prompt) {
+            throw new Error("프롬프트를 제공해야 합니다.");
         }
+        try {
+            const response = await ai.models.generateImages({
+                model: 'imagen-4.0-generate-001',
+                prompt: prompt,
+                config: {
+                  numberOfImages: 1,
+                  outputMimeType: 'image/jpeg',
+                  aspectRatio: aspectRatio,
+                },
+            });
+            
+            if (!response.generatedImages || response.generatedImages.length === 0) {
+                throw new Error("생성된 이미지 데이터를 찾을 수 없습니다.");
+            }
 
-        const data = await response.json();
-        return data.imageUrl;
-    } catch (error) {
-        console.error("Error generating/editing image:", error);
-        throw new Error(error instanceof Error ? error.message : "이미지 생성/편집 중 오류가 발생했습니다.");
+            const base64ImageBytes: string = response.generatedImages[0].image.imageBytes;
+            return `data:image/jpeg;base64,${base64ImageBytes}`;
+        } catch (error) {
+            console.error("Error generating image with imagen:", error);
+            throw new Error("이미지 생성 중 오류가 발생했습니다.");
+        }
+    } else { // EDIT or COMPOSE
+        if (!prompt && images.length === 0) {
+            throw new Error("프롬프트 또는 이미지를 제공해야 합니다.");
+        }
+        
+        try {
+            const imageParts = await Promise.all(images.map(fileToGenerativePart));
+            const textPart = { text: prompt };
+            
+            const allParts = [...imageParts, textPart];
+            
+            const response = await ai.models.generateContent({
+                model: 'gemini-2.5-flash-image',
+                contents: { parts: allParts },
+                config: {
+                    responseModalities: [Modality.IMAGE, Modality.TEXT],
+                },
+            });
+
+            for (const part of response.candidates[0].content.parts) {
+                if (part.inlineData) {
+                    return `data:${part.inlineData.mimeType};base64,${part.inlineData.data}`;
+                }
+            }
+            
+            throw new Error("생성된 이미지 데이터를 찾을 수 없습니다.");
+
+        } catch (error) {
+            console.error("Error generating/editing image:", error);
+            throw new Error("이미지 생성/편집 중 오류가 발생했습니다.");
+        }
     }
 };
